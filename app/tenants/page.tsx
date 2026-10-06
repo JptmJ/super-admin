@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { callBackend, readSession } from '@/lib/session';
+import { readOperator, shellOperator } from '@/lib/operator';
 import { Shell } from '@/components/Shell';
 import type { TenantRow } from '@/lib/api';
 
@@ -18,12 +19,15 @@ export default async function TenantsPage({
   if (params.status) query.set('status', params.status);
   if (params.search) query.set('search', params.search);
 
-  const result = await callBackend<{ rows: TenantRow[]; total: number }>(`/api/platform/tenants?${query}`);
+  const [operator, result] = await Promise.all([
+    readOperator(),
+    callBackend<{ rows: TenantRow[]; total: number }>(`/api/platform/tenants?${query}`),
+  ]);
   if (result.status === 401) redirect('/login');
   const rows = result.data?.rows ?? [];
 
   return (
-    <Shell>
+    <Shell operator={shellOperator(operator)}>
       <div className="page-head">
         <div>
           <h1>Tenants</h1>

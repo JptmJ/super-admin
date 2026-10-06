@@ -4,13 +4,21 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Brand } from './Brand';
 
+/** There is one operator and it holds everything, so nothing here is gated. */
 const NAV = [
   { href: '/', label: 'Overview' },
   { href: '/tenants', label: 'Tenants' },
+  { href: '/support', label: 'Support Sessions' },
+  { href: '/roles', label: 'Roles & Access' },
   { href: '/audit', label: 'Audit Log' },
 ];
 
-export function Shell({ children, operator }: { children: React.ReactNode; operator?: { fullName: string; roleName: string } }) {
+export interface ShellOperator {
+  fullName: string;
+  roleName: string;
+}
+
+export function Shell({ children, operator }: { children: React.ReactNode; operator?: ShellOperator }) {
   const pathname = usePathname();
   const router = useRouter();
 

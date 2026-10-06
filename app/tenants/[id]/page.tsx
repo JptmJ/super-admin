@@ -1,9 +1,13 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { callBackend, readSession } from '@/lib/session';
+import { readOperator, shellOperator } from '@/lib/operator';
 import { Shell } from '@/components/Shell';
 import { TenantWorkspace } from './TenantWorkspace';
-import type { BranchRow, ModuleRow, TenantRole, UserRow } from '@/lib/api';
+import type {
+  BranchRow, ModuleRow, PermissionTreeModule, SupportSessionRow,
+  TenantRoleRow, UserRow,
+} from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,16 +23,21 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
   if (!(await readSession())) redirect('/login');
   const { id } = await params;
 
-  const [detailResult, rolesResult] = await Promise.all([
+  const [operator, detailResult, sessionsResult, tenantRolesResult, treeResult] = await Promise.all([
+    readOperator(),
     callBackend<Detail>(`/api/platform/tenants/${id}`),
-    callBackend<{ tenant: TenantRole[] }>('/api/platform/roles'),
+    // Open windows into this shop, so the Support tab can show and end them.
+    callBackend<{ rows: SupportSessionRow[] }>(`/api/platform/support-sessions?tenantId=${id}&limit=25`),
+    // This business's own roles, and the tree the staff role builder ticks.
+    callBackend<{ rows: TenantRoleRow[] }>(`/api/platform/tenants/${id}/roles`),
+    callBackend<{ modules: PermissionTreeModule[] }>('/api/platform/permission-tree'),
   ]);
 
   if (detailResult.status === 401) redirect('/login');
 
   if (!detailResult.data) {
     return (
-      <Shell>
+      <Shell operator={shellOperator(operator)}>
         <div className="page-head"><h1>Tenant</h1></div>
         <div className="alert error">{detailResult.error?.message ?? 'Could not load this tenant.'}</div>
         <Link className="btn ghost" href="/tenants">Back to tenants</Link>
@@ -37,11 +46,13 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
   }
 
   return (
-    <Shell>
+    <Shell operator={shellOperator(operator)}>
       <TenantWorkspace
         tenantId={id}
         detail={detailResult.data}
-        roles={rolesResult.data?.tenant ?? []}
+        sessions={sessionsResult.data?.rows ?? []}
+        tenantRoles={tenantRolesResult.data?.rows ?? []}
+        permissionTree={treeResult.data?.modules ?? []}
       />
     </Shell>
   );

@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'RatnaGrid — Platform Admin',
+  title: 'Swarnay — Platform Admin',
   description: 'Super admin console: tenants, branches, staff and module licences.',
 };
 

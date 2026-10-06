@@ -62,13 +62,33 @@ export interface TenantRow {
   id: string; code: string; display_name: string; legal_name: string;
   kind: string; status: string; gstin: string | null; created_at: string;
   branch_count: string; user_count: string; module_count: string; admin_email: string | null;
+  max_branches: number | null;
 }
 
+/** A seeded role template: owner or admin. */
 export interface TenantRole {
-  code: string; name: string; description: string;
-  /** True for the one role limited to a single holder per branch. */
+  code: string; name: string; type: string; description: string;
+  /** True for the roles limited to a single holder per branch. */
   isBranchAdmin: boolean;
   permissions: string[];
+}
+
+/** A role as one business actually holds it, including its own staff roles. */
+export interface TenantRoleRow {
+  id: string; code: string; name: string; role_type: 'owner' | 'admin' | 'staff';
+  description: string | null; is_system: boolean; is_active: boolean;
+  permissions: string[]; user_count: number;
+}
+
+/** What the role builder ticks: module → group → action, straight from the API. */
+export interface PermissionTreeModule {
+  key: string; name: string; wildcard: string;
+  groups: Array<{
+    key: string; name: string;
+    /** Null when the group holds the module's own actions rather than a sub-area. */
+    wildcard: string | null;
+    permissions: Array<{ code: string; action: string; description: string }>;
+  }>;
 }
 
 export interface BranchRow {
@@ -94,5 +114,34 @@ export interface PlatformStats {
   tenants: { total: number; active: number; trial: number; suspended: number };
   users: number; branches: number; operators: number;
 }
+
+/** The signed-in operator, with what their role actually lets them do. */
+export interface Operator {
+  id: string; email: string; full_name: string;
+  role: string; roleName: string; roleDescription: string;
+  permissions: string[];
+  phone: string | null; is_active: boolean;
+  last_login_at: string | null; created_at: string;
+}
+
+/** The one platform role. It holds `*`. */
+export interface PlatformRole {
+  code: string; name: string; description: string; permissions: readonly string[];
+}
+
+export interface SupportSessionRow {
+  id: string; tenant_id: string; tenant_code: string; tenant_name: string;
+  reason: string; started_at: string; ends_at: string; ended_at: string | null;
+  can_write: boolean; is_open: boolean; ip_address: string | null;
+  operator_name: string | null; operator_email: string | null;
+  /** Audited changes made inside the window. */
+  action_count: string;
+}
+
+/*
+ * `holds()` lives in `lib/permissions.ts`, not here. This module is
+ * `'use client'`, and a Server Component that imports a *value* from it fails at
+ * request time — the pages need that check while rendering on the server.
+ */
 
 export const ADMIN_ROLE = 'admin';

@@ -10,8 +10,8 @@
  */
 import { cookies } from 'next/headers';
 
-export const SESSION_COOKIE = 'rg_platform_session';
-export const REFRESH_COOKIE = 'rg_platform_refresh';
+export const SESSION_COOKIE = 'sw_platform_session';
+export const REFRESH_COOKIE = 'sw_platform_refresh';
 
 export const backendUrl = (): string => process.env.BACKEND_URL ?? 'http://localhost:4000';
 

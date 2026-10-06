@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Shell } from '@/components/Shell';
-import { AdminApiError, api } from '@/lib/api';
+import { AdminApiError, api, type Operator } from '@/lib/api';
 
 interface ModuleOption {
   key: string; name: string; group: string; appliesTo: string; defaultLicence: string;
@@ -18,8 +18,10 @@ export default function NewTenantPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [kind, setKind] = useState('retailer');
+  const [operator, setOperator] = useState<Operator | null>(null);
 
   useEffect(() => {
+    api.get<Operator>('/platform/me').then(setOperator).catch(() => undefined);
     api.get<{ modules: ModuleOption[] }>('/platform/modules')
       .then((d) => {
         setModules(d.modules);
@@ -51,6 +53,7 @@ export default function NewTenantPage() {
       gstin: value('gstin') || undefined,
       pan: value('pan') || undefined,
       stateCode: value('stateCode') || undefined,
+      maxBranches: value('maxBranches') ? Number(value('maxBranches')) : undefined,
       admin: {
         email: value('adminEmail'),
         fullName: value('adminName'),
@@ -88,7 +91,7 @@ export default function NewTenantPage() {
   const grouped = ['operations', 'commercial', 'finance', 'core'] as const;
 
   return (
-    <Shell>
+    <Shell operator={operator ? { fullName: operator.full_name, roleName: operator.roleName } : undefined}>
       <div className="page-head">
         <div>
           <h1>New tenant</h1>
@@ -153,6 +156,15 @@ export default function NewTenantPage() {
                 <span className="hint">Two digits. Decides CGST+SGST vs IGST on every bill.</span>
               </label>
               <input id="stateCode" name="stateCode" maxLength={2} placeholder="24" />
+            </div>
+            <div className="field">
+              <label htmlFor="maxBranches">Branch limit
+                <span className="hint">
+                  How many branches they may have, as sold. Leave blank for no limit — you can set
+                  it later. Their own admin can add branches up to this number.
+                </span>
+              </label>
+              <input id="maxBranches" name="maxBranches" type="number" min={1} max={500} placeholder="No limit" />
             </div>
           </div>
         </div>

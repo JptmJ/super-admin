@@ -1,9 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { AdminApiError, api, type BranchRow, type ModuleRow, type TenantRole, type UserRow } from '@/lib/api';
+import {
+  AdminApiError, api,
+  type BranchRow, type ModuleRow, type PermissionTreeModule, type SupportSessionRow,
+  type TenantRoleRow, type UserRow,
+} from '@/lib/api';
+import { RolesTab } from './RolesTab';
 
 interface Detail {
   tenant: Record<string, string | null>;
@@ -14,17 +19,23 @@ interface Detail {
   globalAdmin: UserRow | null;
 }
 
-type Tab = 'users' | 'branches' | 'modules' | 'settings';
+type Tab = 'users' | 'roles' | 'branches' | 'modules' | 'support' | 'settings';
 
 export function TenantWorkspace({
-  tenantId, detail, roles,
+  tenantId, detail, sessions, tenantRoles, permissionTree,
 }: {
-  tenantId: string; detail: Detail; roles: TenantRole[];
+  tenantId: string; detail: Detail;
+  sessions: SupportSessionRow[];
+  tenantRoles: TenantRoleRow[];
+  permissionTree: PermissionTreeModule[];
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>('users');
   const [banner, setBanner] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // One operator, holding everything — nothing here is permission-gated.
+  const tabs: Tab[] = ['users', 'roles', 'branches', 'modules', 'support', 'settings'];
+  const [tab, setTab] = useState<Tab>('users');
 
   const tenant = detail.tenant;
 
@@ -59,19 +70,23 @@ export function TenantWorkspace({
       {banner && <div className={`alert ${banner.kind}`}>{banner.text}</div>}
 
       <div className="tabs">
-        {(['users', 'branches', 'modules', 'settings'] as Tab[]).map((t) => (
+        {tabs.map((t) => (
           <button key={t} className={`tab${tab === t ? ' active' : ''}`} onClick={() => setTab(t)}>
             {t === 'users' && `Staff (${detail.users.length})`}
+            {t === 'roles' && `Roles (${tenantRoles.length})`}
             {t === 'branches' && `Branches (${detail.branches.length})`}
             {t === 'modules' && `Modules (${detail.modules.length})`}
+            {t === 'support' && `Support (${sessions.filter((s) => s.is_open).length})`}
             {t === 'settings' && 'Settings'}
           </button>
         ))}
       </div>
 
-      {tab === 'users' && <UsersTab tenantId={tenantId} users={detail.users} branches={detail.branches} roles={roles} globalAdmin={detail.globalAdmin} run={run} busy={busy} />}
-      {tab === 'branches' && <BranchesTab tenantId={tenantId} branches={detail.branches} run={run} busy={busy} />}
+      {tab === 'users' && <UsersTab tenantId={tenantId} users={detail.users} branches={detail.branches} roles={tenantRoles} globalAdmin={detail.globalAdmin} run={run} busy={busy} />}
+      {tab === 'roles' && <RolesTab tenantId={tenantId} roles={tenantRoles} tree={permissionTree} run={run} busy={busy} />}
+      {tab === 'branches' && <BranchesTab tenantId={tenantId} branches={detail.branches} tenant={tenant} run={run} busy={busy} />}
       {tab === 'modules' && <ModulesTab tenantId={tenantId} modules={detail.modules} run={run} busy={busy} />}
+      {tab === 'support' && <SupportTab tenantId={tenantId} tenantName={tenant.display_name ?? ''} sessions={sessions} run={run} busy={busy} />}
       {tab === 'settings' && <SettingsTab tenantId={tenantId} tenant={tenant} run={run} busy={busy} />}
     </>
   );
@@ -84,13 +99,16 @@ type Runner = (action: () => Promise<unknown>, success: string) => Promise<void>
 function UsersTab({
   tenantId, users, branches, roles, globalAdmin, run, busy,
 }: {
-  tenantId: string; users: UserRow[]; branches: BranchRow[]; roles: TenantRole[];
+  tenantId: string; users: UserRow[]; branches: BranchRow[]; roles: TenantRoleRow[];
   globalAdmin: UserRow | null; run: Runner; busy: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [role, setRole] = useState('sales');
+  const [editing, setEditing] = useState<string | null>(null);
+  /** A temporary password is shown once, so it is held here until dismissed. */
+  const [issued, setIssued] = useState<{ name: string; password: string } | null>(null);
 
-  const adminRole = roles.find((r) => r.isBranchAdmin);
+  const adminRole = roles.find((r) => r.role_type === 'admin');
   const creatingAdmin = adminRole ? role === adminRole.code : false;
 
   /* Which branches still have no admin — the only ones a new admin can take. */
@@ -109,7 +127,19 @@ function UsersTab({
 
         <div className="alert info" style={{ marginBottom: 16 }}>
           Only you can add or change staff. Nobody inside the business can — not even a branch admin.
+          The endpoints a shop used to have for this no longer exist, so this is the only way in.
         </div>
+
+        {issued && (
+          <div className="alert ok" style={{ marginBottom: 16 }}>
+            <strong>{issued.name}</strong>’s temporary password is{' '}
+            <code style={{ fontSize: 14 }}>{issued.password}</code> — shown once, so pass it on now.
+            They must change it at next sign-in, and they have been signed out everywhere.
+            <div style={{ marginTop: 8 }}>
+              <button className="btn ghost sm" onClick={() => setIssued(null)}>Dismiss</button>
+            </div>
+          </div>
+        )}
 
         {open && (
           <form
@@ -197,43 +227,124 @@ function UsersTab({
               </thead>
               <tbody>
                 {users.map((u) => (
-                  <tr key={u.id}>
-                    <td><strong>{u.full_name}</strong>{u.phone && <div className="faint">{u.phone}</div>}</td>
-                    <td className="muted">{u.email}</td>
-                    <td>
-                      <span className={`pill ${u.role_code === 'admin' ? 'role' : 'off'}`}>
-                        {u.role_name ?? u.role_code}
-                      </span>
-                    </td>
-                    <td className="muted">
-                      {u.branch_code ? <code>{u.branch_code}</code> : <span className="faint">All branches</span>}
-                    </td>
-                    <td className="faint">{u.last_login_at ? new Date(u.last_login_at).toLocaleDateString('en-IN') : 'Never'}</td>
-                    <td><span className={`pill ${u.is_active ? 'active' : 'off'}`}>{u.is_active ? 'active' : 'disabled'}</span></td>
-                    <td className="row-actions">
-                      <select
-                        defaultValue={u.role_code}
-                        disabled={busy}
-                        onChange={(e) => run(
-                          () => api.patch(`/platform/tenants/${tenantId}/users/${u.id}`, { role: e.target.value }),
-                          `${u.full_name} is now ${roles.find((r) => r.code === e.target.value)?.name ?? e.target.value}.`,
-                        )}
-                        style={{ width: 'auto', padding: '4px 8px', fontSize: 12.4 }}
-                      >
-                        {roles.map((r) => <option key={r.code} value={r.code}>{r.name}</option>)}
-                      </select>
-                      <button
-                        className={`btn sm ${u.is_active ? 'danger' : 'ghost'}`}
-                        disabled={busy}
-                        onClick={() => run(
-                          () => api.patch(`/platform/tenants/${tenantId}/users/${u.id}`, { isActive: !u.is_active }),
-                          `${u.full_name} ${u.is_active ? 'deactivated' : 'reactivated'}.`,
-                        )}
-                      >
-                        {u.is_active ? 'Deactivate' : 'Reactivate'}
-                      </button>
-                    </td>
-                  </tr>
+                  <Fragment key={u.id}>
+                    <tr>
+                      <td><strong>{u.full_name}</strong>{u.phone && <div className="faint">{u.phone}</div>}</td>
+                      <td className="muted">{u.email}</td>
+                      <td>
+                        <span className={`pill ${u.role_code === 'admin' ? 'role' : 'off'}`}>
+                          {u.role_name ?? u.role_code}
+                        </span>
+                      </td>
+                      <td className="muted">
+                        {u.branch_code ? <code>{u.branch_code}</code> : <span className="faint">All branches</span>}
+                      </td>
+                      <td className="faint">{u.last_login_at ? new Date(u.last_login_at).toLocaleDateString('en-IN') : 'Never'}</td>
+                      <td><span className={`pill ${u.is_active ? 'active' : 'off'}`}>{u.is_active ? 'active' : 'disabled'}</span></td>
+                      <td className="row-actions">
+                        <>
+                          <select
+                            defaultValue={u.role_code}
+                            disabled={busy}
+                            onChange={(e) => run(
+                              () => api.patch(`/platform/tenants/${tenantId}/users/${u.id}`, { role: e.target.value }),
+                              `${u.full_name} is now ${roles.find((r) => r.code === e.target.value)?.name ?? e.target.value}.`,
+                            )}
+                            style={{ width: 'auto', padding: '4px 8px', fontSize: 12.4 }}
+                          >
+                            {roles.map((r) => <option key={r.code} value={r.code}>{r.name}</option>)}
+                          </select>
+                          <button
+                            className="btn ghost sm"
+                            disabled={busy}
+                            onClick={() => setEditing(editing === u.id ? null : u.id)}
+                          >
+                            {editing === u.id ? 'Close' : 'Edit'}
+                          </button>
+                        </>
+                        <button
+                          className="btn ghost sm"
+                          disabled={busy}
+                          onClick={() => run(
+                            async () => {
+                              const { temporaryPassword } = await api.post<{ temporaryPassword: string }>(
+                                `/platform/tenants/${tenantId}/users/${u.id}/reset-password`,
+                              );
+                              setIssued({ name: u.full_name, password: temporaryPassword });
+                            },
+                            `New password issued for ${u.full_name}.`,
+                          )}
+                        >
+                          Reset password
+                        </button>
+                        <button
+                          className={`btn sm ${u.is_active ? 'danger' : 'ghost'}`}
+                          disabled={busy}
+                          onClick={() => run(
+                            () => api.patch(`/platform/tenants/${tenantId}/users/${u.id}`, { isActive: !u.is_active }),
+                            `${u.full_name} ${u.is_active ? 'deactivated' : 'reactivated'}.`,
+                          )}
+                        >
+                          {u.is_active ? 'Deactivate' : 'Reactivate'}
+                        </button>
+                      </td>
+                    </tr>
+
+                    {editing === u.id && (
+                      <tr>
+                        <td colSpan={7} style={{ background: 'var(--surface-sunken, rgba(0,0,0,.03))' }}>
+                          <form
+                            onSubmit={async (e) => {
+                              e.preventDefault();
+                              const form = new FormData(e.currentTarget);
+                              const v = (n: string) => String(form.get(n) ?? '').trim();
+                              const branch = v('branchId');
+                              await run(
+                                () => api.patch(`/platform/tenants/${tenantId}/users/${u.id}`, {
+                                  fullName: v('fullName'),
+                                  email: v('email') || null,
+                                  phone: v('phone') || null,
+                                  // '' is the every-branch choice, which the API takes as null.
+                                  branchId: branch === '' ? null : branch,
+                                }),
+                                `${v('fullName')} saved.`,
+                              );
+                              setEditing(null);
+                            }}
+                          >
+                            <div className="form-grid">
+                              <div className="field">
+                                <label htmlFor={`fn-${u.id}`}>Full name</label>
+                                <input id={`fn-${u.id}`} name="fullName" defaultValue={u.full_name} required />
+                              </div>
+                              <div className="field">
+                                <label htmlFor={`em-${u.id}`}>Email</label>
+                                <input id={`em-${u.id}`} name="email" type="email" defaultValue={u.email ?? ''} />
+                              </div>
+                              <div className="field">
+                                <label htmlFor={`ph-${u.id}`}>Phone</label>
+                                <input id={`ph-${u.id}`} name="phone" defaultValue={u.phone ?? ''} />
+                              </div>
+                              <div className="field">
+                                <label htmlFor={`br-${u.id}`}>Branch
+                                  <span className="hint">A branch admin cannot move to a branch that already has one.</span>
+                                </label>
+                                <select id={`br-${u.id}`} name="branchId" defaultValue={u.default_branch_id ?? ''}>
+                                  <option value="">All branches</option>
+                                  {branches.map((b) => (
+                                    <option key={b.id} value={b.id}>{b.code} — {b.name}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                            <button className="btn primary sm" type="submit" disabled={busy} style={{ marginTop: 12 }}>
+                              {busy ? <><span className="spinner" /> Saving…</> : 'Save'}
+                            </button>
+                          </form>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -276,18 +387,21 @@ function UsersTab({
       </div>
 
       <div className="card">
-        <h3 style={{ marginBottom: 8 }}>The four roles</h3>
+        <h3 style={{ marginBottom: 8 }}>The roles you can assign</h3>
         <div className="table-wrap">
           <table>
             <thead><tr><th>Role</th><th>What they can do</th><th>Limit</th></tr></thead>
             <tbody>
-              {roles.map((r) => (
-                <tr key={r.code}>
-                  <td><span className={`pill ${r.isBranchAdmin ? 'role' : 'off'}`}>{r.name}</span></td>
-                  <td className="muted">{r.description}</td>
-                  <td className="faint">{r.isBranchAdmin ? 'One per branch' : '—'}</td>
-                </tr>
-              ))}
+              {roles.map((r) => {
+                const onePerBranch = r.role_type === 'owner' || r.role_type === 'admin';
+                return (
+                  <tr key={r.id}>
+                    <td><span className={`pill ${onePerBranch ? 'role' : 'off'}`}>{r.name}</span></td>
+                    <td className="muted">{r.description ?? '—'}</td>
+                    <td className="faint">{onePerBranch ? 'One per branch' : '—'}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -299,16 +413,39 @@ function UsersTab({
 /* ---------------------------------------------------------- branches */
 
 function BranchesTab({
-  tenantId, branches, run, busy,
-}: { tenantId: string; branches: BranchRow[]; run: Runner; busy: boolean }) {
+  tenantId, branches, tenant, run, busy,
+}: {
+  tenantId: string; branches: BranchRow[];
+  tenant: Record<string, string | null>;
+  run: Runner; busy: boolean;
+}) {
   const [open, setOpen] = useState(false);
+
+  const limit = tenant.max_branches === null || tenant.max_branches === undefined
+    ? null
+    : Number(tenant.max_branches);
+  const atLimit = limit !== null && branches.length >= limit;
 
   return (
     <div className="card">
       <div className="card-head">
         <h2>Branches</h2>
-        <button className="btn gold sm" onClick={() => setOpen((v) => !v)}>{open ? 'Close' : '+ Add branch'}</button>
+        <button
+          className="btn gold sm"
+          disabled={atLimit}
+          title={atLimit ? 'This business is at its branch limit. Raise it under Settings.' : undefined}
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open ? 'Close' : '+ Add branch'}
+        </button>
       </div>
+
+      <p className="faint" style={{ margin: '0 0 14px' }}>
+        {limit === null
+          ? `${branches.length} branch${branches.length === 1 ? '' : 'es'}, no limit set. The shop's own admin can add more.`
+          : `${branches.length} of ${limit} branches used. The shop's own admin can add more up to that number.`}
+        {atLimit && ' Raise the limit under Settings to add another.'}
+      </p>
 
       {open && (
         <form
@@ -419,35 +556,37 @@ function ModulesTab({
                   <td className="faint">{deadline ? new Date(deadline).toLocaleDateString('en-IN') : '—'}</td>
                   <td><span className={`pill ${m.enabled ? 'active' : 'off'}`}>{m.enabled ? 'on' : 'off'}</span></td>
                   <td className="row-actions">
-                    <select
-                      defaultValue={m.licence}
-                      disabled={busy}
-                      onChange={(e) => run(
-                        () => api.put(`/platform/tenants/${tenantId}/modules/${m.module_key}`, {
-                          licence: e.target.value,
-                          trialEndsAt: e.target.value === 'trial'
-                            ? new Date(Date.now() + 30 * 86400000).toISOString()
-                            : null,
-                        }),
-                        `${m.name} set to ${e.target.value}.`,
-                      )}
-                      style={{ width: 'auto', padding: '4px 8px', fontSize: 12.4 }}
-                    >
-                      <option value="included">Included</option>
-                      <option value="purchased">Purchased</option>
-                      <option value="trial">Trial</option>
-                      <option value="expired">Expired</option>
-                    </select>
-                    <button
-                      className="btn ghost sm"
-                      disabled={busy}
-                      onClick={() => run(
-                        () => api.put(`/platform/tenants/${tenantId}/modules/${m.module_key}`, { enabled: !m.enabled }),
-                        `${m.name} turned ${m.enabled ? 'off' : 'on'}.`,
-                      )}
-                    >
-                      {m.enabled ? 'Turn off' : 'Turn on'}
-                    </button>
+                    <>
+                      <select
+                        defaultValue={m.licence}
+                        disabled={busy}
+                        onChange={(e) => run(
+                          () => api.put(`/platform/tenants/${tenantId}/modules/${m.module_key}`, {
+                            licence: e.target.value,
+                            trialEndsAt: e.target.value === 'trial'
+                              ? new Date(Date.now() + 30 * 86400000).toISOString()
+                              : null,
+                          }),
+                          `${m.name} set to ${e.target.value}.`,
+                        )}
+                        style={{ width: 'auto', padding: '4px 8px', fontSize: 12.4 }}
+                      >
+                        <option value="included">Included</option>
+                        <option value="purchased">Purchased</option>
+                        <option value="trial">Trial</option>
+                        <option value="expired">Expired</option>
+                      </select>
+                      <button
+                        className="btn ghost sm"
+                        disabled={busy}
+                        onClick={() => run(
+                          () => api.put(`/platform/tenants/${tenantId}/modules/${m.module_key}`, { enabled: !m.enabled }),
+                          `${m.name} turned ${m.enabled ? 'off' : 'on'}.`,
+                        )}
+                      >
+                        {m.enabled ? 'Turn off' : 'Turn on'}
+                      </button>
+                    </>
                   </td>
                 </tr>
               );
@@ -459,11 +598,193 @@ function ModulesTab({
   );
 }
 
+/* ----------------------------------------------------------- support */
+
+function SupportTab({
+  tenantId, tenantName, sessions, run, busy,
+}: {
+  tenantId: string; tenantName: string; sessions: SupportSessionRow[];
+  run: Runner; busy: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  /** The session token is returned once, so it is held here until dismissed. */
+  const [issued, setIssued] = useState<{ token: string; endsAt: string; canWrite: boolean } | null>(null);
+
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/+$/, '');
+
+  return (
+    <>
+      <div className="card">
+        <div className="card-head">
+          <h2>Support sessions</h2>
+          <button className="btn gold sm" onClick={() => setOpen((v) => !v)}>
+            {open ? 'Close' : '+ Open a session'}
+          </button>
+        </div>
+
+        <div className="alert info" style={{ marginBottom: 16 }}>
+          A session is the only way into this shop’s data — a platform token is refused by every
+          tenant endpoint. Every action inside the window is tagged with the session in the shop’s
+          own audit log, so you can always show them exactly what was touched and when.
+        </div>
+
+        {issued && (
+          <div className="alert ok" style={{ marginBottom: 16 }}>
+            <div>
+              Session open until <strong>{new Date(issued.endsAt).toLocaleString('en-IN')}</strong>
+              {' — '}{issued.canWrite ? 'can make changes' : 'read-only'}.
+            </div>
+            <p className="faint" style={{ margin: '8px 0' }}>
+              Open the shop below, or send the token as <code>Authorization: Bearer …</code> against
+              the ordinary tenant API. It is shown once and stored only as a hash, so if you lose it,
+              open a new session.
+            </p>
+            <textarea
+              readOnly
+              value={issued.token}
+              rows={3}
+              style={{ width: '100%', fontFamily: 'monospace', fontSize: 11.5 }}
+              onFocus={(e) => e.currentTarget.select()}
+            />
+            <div className="row-actions" style={{ marginTop: 8 }}>
+              {appUrl && (
+                /*
+                 * The token rides in the fragment, which browsers do not send to
+                 * the server or put in a Referer header. The app adopts it and
+                 * strips it from the address bar on arrival.
+                 */
+                <a
+                  className="btn gold sm"
+                  href={`${appUrl}/#support=${encodeURIComponent(issued.token)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open {tenantName} →
+                </a>
+              )}
+              <button className="btn ghost sm" onClick={() => setIssued(null)}>Dismiss</button>
+            </div>
+          </div>
+        )}
+
+        {open && (
+          <form
+            style={{ marginBottom: 18, paddingBottom: 18, borderBottom: '1px solid var(--border-subtle)' }}
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const form = new FormData(e.currentTarget);
+              const v = (n: string) => String(form.get(n) ?? '').trim();
+              const write = form.get('canWrite') === 'on';
+              await run(
+                async () => {
+                  const result = await api.post<{ token: string; endsAt: string }>('/platform/support-sessions', {
+                    tenantId,
+                    reason: v('reason'),
+                    durationMinutes: Number(v('durationMinutes') || 120),
+                    canWrite: write,
+                  });
+                  setIssued({ token: result.token, endsAt: result.endsAt, canWrite: write });
+                },
+                `Session opened into ${tenantName}.`,
+              );
+              setOpen(false);
+            }}
+          >
+            <div className="form-grid">
+              <div className="field" style={{ gridColumn: '1 / -1' }}>
+                <label htmlFor="reason">Why<span className="req">*</span>
+                  <span className="hint">
+                    Written to the audit log and shown to the tenant. Be specific — “Rahul’s 14 Oct
+                    invoice shows the wrong making charge” beats “debugging”.
+                  </span>
+                </label>
+                <input id="reason" name="reason" required minLength={5} maxLength={500} />
+              </div>
+              <div className="field">
+                <label htmlFor="durationMinutes">Minutes
+                  <span className="hint">5 to 480. The window is a hard stop.</span>
+                </label>
+                <input id="durationMinutes" name="durationMinutes" type="number" min={5} max={480} defaultValue={120} />
+              </div>
+              <div className="field">
+                <label htmlFor="canWrite">Write access</label>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 400 }}>
+                  <input id="canWrite" name="canWrite" type="checkbox" style={{ width: 'auto' }} />
+                  <span className="faint">Allow changes, not just reading. A deliberate escalation.</span>
+                </label>
+              </div>
+            </div>
+            <button className="btn primary" type="submit" disabled={busy} style={{ marginTop: 14 }}>
+              {busy ? <><span className="spinner" /> Opening…</> : 'Open session'}
+            </button>
+          </form>
+        )}
+
+        {sessions.length === 0 ? (
+          <div className="empty">Nobody from the platform has been into this shop.</div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Started</th><th>Operator</th><th>Why</th><th>Access</th>
+                  <th className="num">Changes</th><th>State</th><th />
+                </tr>
+              </thead>
+              <tbody>
+                {sessions.map((s) => (
+                  <tr key={s.id}>
+                    <td className="faint" style={{ whiteSpace: 'nowrap' }}>
+                      {new Date(s.started_at).toLocaleString('en-IN')}
+                    </td>
+                    <td>{s.operator_name ?? '—'}<div className="faint">{s.operator_email}</div></td>
+                    <td style={{ maxWidth: 260 }}>{s.reason}</td>
+                    <td>
+                      <span className={`pill ${s.can_write ? 'suspended' : 'off'}`}>
+                        {s.can_write ? 'can write' : 'read-only'}
+                      </span>
+                    </td>
+                    <td className="num">{s.action_count}</td>
+                    <td>
+                      {s.is_open ? (
+                        <span className="pill active">
+                          open till {new Date(s.ends_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      ) : (
+                        <span className="pill off">{s.ended_at ? 'closed' : 'expired'}</span>
+                      )}
+                    </td>
+                    <td className="row-actions">
+                      {s.is_open && (
+                        <button
+                          className="btn danger sm"
+                          disabled={busy}
+                          onClick={() => run(
+                            () => api.post(`/platform/support-sessions/${s.id}/end`),
+                            'Session closed.',
+                          )}
+                        >
+                          End now
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 /* ---------------------------------------------------------- settings */
 
 function SettingsTab({
   tenantId, tenant, run, busy,
 }: { tenantId: string; tenant: Record<string, string | null>; run: Runner; busy: boolean }) {
+
   return (
     <>
       <div className="card">
@@ -476,7 +797,11 @@ function SettingsTab({
             await run(
               () => api.patch(`/platform/tenants/${tenantId}`, {
                 displayName: v('displayName'), legalName: v('legalName'),
-                kind: v('kind'), gstin: v('gstin') || undefined,
+                kind: v('kind'),
+                gstin: v('gstin') || undefined,
+                pan: v('pan') || undefined,
+                // Blank means no limit, which the API takes as null.
+                maxBranches: v('maxBranches') ? Number(v('maxBranches')) : null,
               }),
               'Saved.',
             );
@@ -503,8 +828,27 @@ function SettingsTab({
               <label htmlFor="sGstin">GSTIN</label>
               <input id="sGstin" name="gstin" defaultValue={tenant.gstin ?? ''} />
             </div>
+            <div className="field">
+              <label htmlFor="sPan">PAN</label>
+              <input id="sPan" name="pan" defaultValue={tenant.pan ?? ''} />
+            </div>
+            <div className="field">
+              <label htmlFor="sMaxBranches">Branch limit
+                <span className="hint">
+                  How many branches they may have, as sold. Leave blank for no limit. Checked both
+                  here and when the shop’s own admin adds one.
+                </span>
+              </label>
+              <input
+                id="sMaxBranches" name="maxBranches" type="number" min={1} max={500}
+                defaultValue={tenant.max_branches ?? ''}
+                placeholder="No limit"
+              />
+            </div>
           </div>
-          <button className="btn primary" type="submit" disabled={busy} style={{ marginTop: 14 }}>Save changes</button>
+          <button className="btn primary" type="submit" disabled={busy} style={{ marginTop: 14 }}>
+            Save changes
+          </button>
         </form>
       </div>
 

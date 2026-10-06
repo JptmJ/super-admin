@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { callBackend, readSession } from '@/lib/session';
+import { readOperator, shellOperator } from '@/lib/operator';
 import { Shell } from '@/components/Shell';
 import Link from 'next/link';
 import type { PlatformStats, TenantRow } from '@/lib/api';
@@ -9,7 +10,8 @@ export const dynamic = 'force-dynamic';
 export default async function OverviewPage() {
   if (!(await readSession())) redirect('/login');
 
-  const [statsResult, tenantsResult] = await Promise.all([
+  const [operator, statsResult, tenantsResult] = await Promise.all([
+    readOperator(),
     callBackend<PlatformStats>('/api/platform/stats'),
     callBackend<{ rows: TenantRow[] }>('/api/platform/tenants?limit=8'),
   ]);
@@ -22,7 +24,7 @@ export default async function OverviewPage() {
   const tenants = tenantsResult.data?.rows ?? [];
 
   return (
-    <Shell>
+    <Shell operator={shellOperator(operator)}>
       <div className="page-head">
         <div>
           <h1>Overview</h1>
@@ -41,6 +43,7 @@ export default async function OverviewPage() {
           <div className="stat"><b className="num">{stats.tenants.suspended}</b><span>Suspended</span></div>
           <div className="stat"><b className="num">{stats.branches}</b><span>Branches</span></div>
           <div className="stat"><b className="num">{stats.users}</b><span>Staff accounts</span></div>
+          <div className="stat"><b className="num">{stats.operators}</b><span>Operators</span></div>
         </div>
       )}
 

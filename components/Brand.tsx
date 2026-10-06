@@ -8,7 +8,7 @@ export function Brand({ compact = false }: { compact?: boolean }) {
       </svg>
       {!compact && (
         <b>
-          Ratna<span>Grid</span>
+          Swar<span>nay</span>
         </b>
       )}
     </div>

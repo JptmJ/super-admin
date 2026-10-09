@@ -8,7 +8,12 @@ import { AdminApiError, api, type Operator } from '@/lib/api';
 
 interface ModuleOption {
   key: string; name: string; group: string; appliesTo: string; defaultLicence: string;
+  /** Never switched off — the form offers no "off" for it. */
+  required: boolean;
 }
+
+/** The licence select's value for a module the business should start without. */
+const OFF = 'off';
 
 export default function NewTenantPage() {
   const router = useRouter();
@@ -43,7 +48,9 @@ export default function NewTenantPage() {
     // else is noise the backend would just re-apply.
     const changed = modules
       .filter((m) => licences[m.key] && licences[m.key] !== m.defaultLicence)
-      .map((m) => ({ key: m.key, licence: licences[m.key] as 'included' | 'purchased' | 'trial', trialDays: 30 }));
+      .map((m) => licences[m.key] === OFF
+        ? { key: m.key, licence: m.defaultLicence as 'included' | 'purchased' | 'trial', enabled: false }
+        : { key: m.key, licence: licences[m.key] as 'included' | 'purchased' | 'trial', trialDays: 30 });
 
     const body = {
       code: value('code'),
@@ -231,7 +238,8 @@ export default function NewTenantPage() {
           <h2 style={{ marginBottom: 4 }}>Module licences</h2>
           <p className="faint" style={{ margin: '0 0 14px' }}>
             Defaults are pre-selected. A lapsed module still appears in their dock, locked — so they
-            can see what they are missing rather than having it silently vanish.
+            can see what they are missing rather than having it silently vanish. A module switched off
+            is gone from their menu and refused by the API; turn it on later from the tenant’s Modules tab.
           </p>
 
           {grouped.map((group) => {
@@ -256,6 +264,7 @@ export default function NewTenantPage() {
                         <option value="included">Included</option>
                         <option value="purchased">Purchased</option>
                         <option value="trial">Trial (30 days)</option>
+                        {!m.required && <option value={OFF}>Switched off</option>}
                       </select>
                     </div>
                   ))}

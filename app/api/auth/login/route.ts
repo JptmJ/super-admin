@@ -14,6 +14,7 @@ export async function POST(request: Request) {
 
   let response: Response;
   try {
+    console.log('backendUrl', backendUrl());
     response = await fetch(`${backendUrl()}/api/platform/auth/login`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

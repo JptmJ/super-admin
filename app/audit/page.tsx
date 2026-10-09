@@ -18,6 +18,7 @@ const TONE: Record<string, string> = {
   'user.create': 'active', 'user.deactivate': 'suspended', 'user.activate': 'active',
   'user.update': 'purchased', 'user.role_change': 'purchased', 'user.password_reset': 'trial',
   'branch.create': 'active', 'module.entitlement': 'trial', 'flag.set': 'trial',
+  'module.enable': 'active', 'module.disable': 'suspended',
   'support.session_start': 'suspended', 'support.session_end': 'off',
   'platform.login': 'off',
 };
@@ -27,7 +28,7 @@ const ACTIONS = [
   'tenant.create', 'tenant.update', 'branch.create',
   'user.create', 'user.update', 'user.role_change', 'user.password_reset',
   'user.activate', 'user.deactivate',
-  'module.entitlement', 'flag.set',
+  'module.entitlement', 'module.enable', 'module.disable', 'flag.set',
   'support.session_start', 'support.session_end', 'platform.login',
 ];
 

@@ -105,9 +105,23 @@ export interface UserRow {
   default_branch_id: string | null; branch_name: string | null; branch_code: string | null;
 }
 
+export interface SubModuleRow {
+  key: string; name: string; status: 'live' | 'planned';
+  /** True when switching it off is enforced (API and shop app); false when nothing checks it yet. */
+  enforced: boolean;
+}
+
 export interface ModuleRow {
-  module_key: string; name: string; group: string; enabled: boolean;
+  module_key: string; name: string; group: string; description: string | null; enabled: boolean;
   licence: string; trial_ends_at: string | null; expires_at: string | null;
+  /** Trial or term has lapsed: shown in the shop's dock, but locked. */
+  locked: boolean;
+  disabled_submodules: string[];
+  /** Master Data, Settings and SaaS Admin — never switched off. */
+  required: boolean;
+  /** False for a module this kind of business does not use. */
+  applies: boolean;
+  sub_modules: SubModuleRow[];
 }
 
 export interface PlatformStats {

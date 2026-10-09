@@ -208,3 +208,12 @@ input[aria-invalid="true"] { border-color: var(--danger); }
 .login-card .brand { justify-content: center; padding-bottom: 8px; }
 .login-card h1 { text-align: center; font-size: 1.2rem; margin-bottom: 4px; }
 .login-card > p { text-align: center; color: var(--ink-muted); font-size: 13.2px; margin: 0 0 22px; }
+
+/* ---------------- module switches ---------------- */
+tr.row-off td { color: var(--ink-faint); }
+tr.row-off td strong { color: var(--ink-muted); }
+tr.row-detail, tr.row-detail:hover { background: var(--forest-surface); }
+.sub-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px 18px; }
+.sub-item { display: flex; align-items: flex-start; gap: 9px; font-weight: 500; cursor: pointer; }
+.sub-item input { width: auto; margin-top: 2px; accent-color: var(--forest); }
+.sub-item.fixed { cursor: default; color: var(--ink-faint); }

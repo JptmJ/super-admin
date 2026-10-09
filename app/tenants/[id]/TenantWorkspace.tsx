@@ -533,35 +533,57 @@ function BranchesTab({
 function ModulesTab({
   tenantId, modules, run, busy,
 }: { tenantId: string; modules: ModuleRow[]; run: Runner; busy: boolean }) {
+  /** Which module's sub-modules are open for editing. */
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const onCount = modules.filter((m) => m.enabled).length;
+
+  const put = (m: ModuleRow, body: Record<string, unknown>) =>
+    api.put(`/platform/tenants/${tenantId}/modules/${m.module_key}`, body);
+
+  function toggle(m: ModuleRow) {
+    if (m.enabled && !window.confirm(
+      `Switch ${m.name} off for this business?\n\nIt leaves their menu and its screens stop working at once, ` +
+      'for their staff and for support sessions. Nothing is deleted — switching it back on restores everything.',
+    )) return;
+    void run(() => put(m, { enabled: !m.enabled }), `${m.name} switched ${m.enabled ? 'off' : 'on'}.`);
+  }
+
   return (
     <div className="card">
       <div className="card-head">
-        <h2>Module licences</h2>
+        <h2>Modules</h2>
+        <span className="faint">{onCount} of {modules.length} on</span>
       </div>
-      <p className="faint" style={{ margin: '0 0 14px' }}>
-        A lapsed module still shows in the tenant’s dock, locked — they can see what they are missing
-        rather than having it disappear.
-      </p>
+      <div className="alert info">
+        Switching a module off takes it out of the shop’s menu, and the API refuses every one of its
+        endpoints — for their staff and for support sessions alike. Their data stays as it is, so switching
+        it back on restores everything. Master Data, Settings and SaaS Admin are always on: everything else
+        depends on them.
+      </div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Module</th><th>Group</th><th>Licence</th><th>Expires</th><th>Enabled</th><th /></tr></thead>
+          <thead><tr><th>Module</th><th>Licence</th><th>Expires</th><th>Status</th><th /></tr></thead>
           <tbody>
             {modules.map((m) => {
               const deadline = m.licence === 'trial' ? m.trial_ends_at : m.expires_at;
+              const offSubs = m.disabled_submodules.length;
+              const open = expanded === m.module_key;
               return (
-                <tr key={m.module_key}>
-                  <td><strong>{m.name}</strong><div className="faint"><code>{m.module_key}</code></div></td>
-                  <td className="muted">{m.group}</td>
-                  <td><span className={`pill ${m.licence}`}>{m.licence}</span></td>
-                  <td className="faint">{deadline ? new Date(deadline).toLocaleDateString('en-IN') : '—'}</td>
-                  <td><span className={`pill ${m.enabled ? 'active' : 'off'}`}>{m.enabled ? 'on' : 'off'}</span></td>
-                  <td className="row-actions">
-                    <>
+                <Fragment key={m.module_key}>
+                  <tr className={m.enabled ? undefined : 'row-off'}>
+                    <td>
+                      <strong>{m.name}</strong>
+                      <div className="faint">
+                        <code>{m.module_key}</code> · {m.group}
+                        {!m.applies && ' · not used by this kind of business'}
+                      </div>
+                    </td>
+                    <td>
                       <select
-                        defaultValue={m.licence}
+                        value={m.licence}
                         disabled={busy}
                         onChange={(e) => run(
-                          () => api.put(`/platform/tenants/${tenantId}/modules/${m.module_key}`, {
+                          () => put(m, {
                             licence: e.target.value,
                             trialEndsAt: e.target.value === 'trial'
                               ? new Date(Date.now() + 30 * 86400000).toISOString()
@@ -570,29 +592,112 @@ function ModulesTab({
                           `${m.name} set to ${e.target.value}.`,
                         )}
                         style={{ width: 'auto', padding: '4px 8px', fontSize: 12.4 }}
+                        aria-label={`${m.name} licence`}
                       >
                         <option value="included">Included</option>
                         <option value="purchased">Purchased</option>
                         <option value="trial">Trial</option>
                         <option value="expired">Expired</option>
                       </select>
-                      <button
-                        className="btn ghost sm"
-                        disabled={busy}
-                        onClick={() => run(
-                          () => api.put(`/platform/tenants/${tenantId}/modules/${m.module_key}`, { enabled: !m.enabled }),
-                          `${m.name} turned ${m.enabled ? 'off' : 'on'}.`,
+                    </td>
+                    <td className="faint">{deadline ? new Date(deadline).toLocaleDateString('en-IN') : '—'}</td>
+                    <td>
+                      {!m.enabled
+                        ? <span className="pill off">off</span>
+                        : m.locked
+                          ? <span className="pill expired">locked</span>
+                          : <span className="pill active">on</span>}
+                      {m.enabled && offSubs > 0 && (
+                        <div className="faint" style={{ fontSize: 11.6, marginTop: 3 }}>{offSubs} sub-module{offSubs === 1 ? '' : 's'} off</div>
+                      )}
+                    </td>
+                    <td className="row-actions" style={{ justifyContent: 'flex-end' }}>
+                      {m.sub_modules.length > 0 && !m.required && (
+                        <button
+                          className="btn ghost sm"
+                          disabled={!m.enabled}
+                          onClick={() => setExpanded(open ? null : m.module_key)}
+                          aria-expanded={open}
+                        >
+                          {open ? 'Close' : 'Sub-modules'}
+                        </button>
+                      )}
+                      {m.required
+                        ? <span className="pill role" title="Every other module depends on this one.">always on</span>
+                        : (
+                          <button className={`btn sm ${m.enabled ? 'danger' : 'primary'}`} disabled={busy} onClick={() => toggle(m)}>
+                            {m.enabled ? 'Switch off' : 'Switch on'}
+                          </button>
                         )}
-                      >
-                        {m.enabled ? 'Turn off' : 'Turn on'}
-                      </button>
-                    </>
-                  </td>
-                </tr>
+                    </td>
+                  </tr>
+                  {open && m.enabled && (
+                    <tr className="row-detail">
+                      <td colSpan={5}>
+                        <SubModuleEditor
+                          module={m}
+                          busy={busy}
+                          onSave={(disabled) => run(
+                            () => put(m, { disabledSubmodules: disabled }),
+                            `${m.name}: sub-modules saved.`,
+                          )}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               );
             })}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Ticks for one module's sub-modules, saved together. Only a sub-module with
+ * permissions of its own can be switched off apart from its module — that is
+ * what both the API and the shop's screens check. The rest are shown, greyed,
+ * so the operator does not believe something is off that nothing enforces.
+ */
+function SubModuleEditor({
+  module, busy, onSave,
+}: { module: ModuleRow; busy: boolean; onSave: (disabled: string[]) => void }) {
+  const [off, setOff] = useState<Set<string>>(() => new Set(module.disabled_submodules));
+  const dirty = off.size !== module.disabled_submodules.length
+    || module.disabled_submodules.some((k) => !off.has(k));
+
+  const flip = (key: string) => setOff((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
+
+  return (
+    <div className="sub-editor">
+      <div className="sub-grid">
+        {module.sub_modules.map((s) => {
+          // A stray "off" saved earlier can still be turned back on.
+          const fixed = !s.enforced && !off.has(s.key);
+          return (
+            <label key={s.key} className={`sub-item${fixed ? ' fixed' : ''}`}>
+              <input type="checkbox" checked={!off.has(s.key)} onChange={() => flip(s.key)} disabled={busy || fixed} />
+              <span>
+                {s.name}
+                <span className="hint">
+                  <code>{s.key}</code>
+                  {s.status === 'planned' && ' · not built yet'}
+                  {!s.enforced && ' · follows the module — no separate switch yet'}
+                </span>
+              </span>
+            </label>
+          );
+        })}
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <button className="btn gold sm" disabled={busy || !dirty} onClick={() => onSave([...off])}>Save sub-modules</button>
+        <button className="btn ghost sm" disabled={busy || !dirty} onClick={() => setOff(new Set(module.disabled_submodules))}>Reset</button>
       </div>
     </div>
   );

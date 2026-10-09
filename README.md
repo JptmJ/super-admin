@@ -87,6 +87,33 @@ means no limit, which is where every business starts. It is checked on both
 paths, so a shop whose admin may add branches cannot add thirty, and it counts
 deactivated branches too — otherwise a branch could be parked to reclaim a slot.
 
+## Switching modules off
+
+Each tenant's **Modules** tab has a switch per module. Switching one off:
+
+- takes it out of the shop's menu (the app reads its module list from the
+  session, and re-reads it the moment a call is refused), and
+- makes the API refuse **every endpoint of that module** with 403
+  `module_disabled` — for the shop's staff and for support sessions alike.
+  Hiding a menu item alone would leave the endpoints answering anyone who knew
+  the URL.
+
+Nothing is deleted. Switching it back on restores the module exactly as it was.
+Other instances of the backend pick the change up within a minute.
+
+**Master Data, Settings and SaaS Admin are always on.** Every other module reads
+rates, items, customers and numbering from them, so the API refuses to switch
+them off (`module_required`).
+
+**Sub-modules** can be switched off one at a time where they have permissions
+of their own — Purchase and Customer Return under POS, Stock Transfer, Melt
+Batches, the three Swarna Nidhi areas and the three ledgers. The rest are shown
+greyed: they follow their module until they get permissions of their own.
+
+The create form offers **Switched off** per module too, so a business can start
+without one. Every switch is in the audit log as `module.enable` /
+`module.disable`.
+
 ## Pages
 
 | Route | What it does |
@@ -95,7 +122,7 @@ deactivated branches too — otherwise a branch could be parked to reclaim a slo
 | `/` | Platform counts and the most recent tenants. |
 | `/tenants` | Every tenant, with filters. |
 | `/tenants/new` | Create a tenant + its admin + first branch + licences, in one form. |
-| `/tenants/[id]` | Staff, **roles**, branches, module licences, support sessions and account status. |
+| `/tenants/[id]` | Staff, **roles**, branches, module licences and **on/off switches**, support sessions and account status. |
 | `/support` | Every support session, open and past, with what each one changed. |
 | `/flags` | Feature flags: the global default and any per-tenant override. |
 | `/roles` | The role kinds and everything a staff role can be given, read-only. Build them per tenant. |

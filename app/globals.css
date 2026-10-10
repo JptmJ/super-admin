@@ -269,3 +269,13 @@ tr.row-detail, tr.row-detail:hover { background: var(--forest-surface); }
 /* Links on this page stay readable in both themes; the forest link colour is too dark on a dark card. */
 .demo-title a, .demo-keys a { color: var(--gold-ink); text-decoration: none; }
 .demo-title a:hover, .demo-keys a:hover { text-decoration: underline; }
+
+/* ---------------- theme switch (sidebar) ---------------- */
+.theme-switch { display: flex; gap: 2px; margin: 0 8px 12px; padding: 3px; border-radius: 8px; background: rgba(255,255,255,0.08); }
+.theme-switch button {
+  flex: 1; font-family: var(--f-body); font-size: 11.6px; font-weight: 600; color: #c6dbd1;
+  background: none; border: 0; border-radius: 6px; padding: 5px 0; cursor: pointer;
+}
+.theme-switch button:hover { color: #fff; }
+.theme-switch button[aria-pressed='true'] { background: var(--gold); color: #24190a; }
+.theme-switch button:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }

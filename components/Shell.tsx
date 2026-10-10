@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Brand } from './Brand';
+import { ThemeSwitch } from './ThemeSwitch';
 
 /** There is one operator and it holds everything, so nothing here is gated. */
 const NAV = [
@@ -42,6 +43,7 @@ export function Shell({ children, operator }: { children: React.ReactNode; opera
         })}
 
         <div className="side-foot">
+          <ThemeSwitch />
           {operator && (
             <div style={{ padding: '0 8px 10px' }}>
               <div style={{ fontSize: 13.4, fontWeight: 600, color: '#fff' }}>{operator.fullName}</div>

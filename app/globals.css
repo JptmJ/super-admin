@@ -35,8 +35,37 @@
   --f-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 }
 
+/*
+ * Theme: the sidebar's System / Light / Dark switch sets data-theme on <html>
+ * (see ThemeSwitch). With no choice made, the console follows the device. The
+ * dark tokens are written twice — once for the choice, once for the device —
+ * because a media query cannot be combined with an attribute selector.
+ */
+:root { color-scheme: light; }
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --canvas: #0d0f12;
+  --card: #15181e;
+  --ink: #f0f4f8;
+  --ink-secondary: #c5d0dc;
+  --ink-muted: #8899a8;
+  --ink-faint: #68788a;
+  --border: #2b323d;
+  --border-subtle: #202630;
+  --border-strong: #566170;
+  --forest-surface: #1c2027;
+  --gold-surface: #292418;
+  --gold-ink: #ffe5a6;
+  --success-bg: #12251a;
+  --danger-bg: #2a1518;
+  --warn-bg: #251e10;
+  --info-bg: #101f2b;
+}
+
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
     --canvas: #0d0f12;
     --card: #15181e;
     --ink: #f0f4f8;
@@ -217,3 +246,26 @@ tr.row-detail, tr.row-detail:hover { background: var(--forest-surface); }
 .sub-item { display: flex; align-items: flex-start; gap: 9px; font-weight: 500; cursor: pointer; }
 .sub-item input { width: auto; margin-top: 2px; accent-color: var(--forest); }
 .sub-item.fixed { cursor: default; color: var(--ink-faint); }
+
+/* ---------------- demo accounts ---------------- */
+.pill.demo { background: var(--info-bg); color: var(--info); border: 1px solid var(--info); }
+.progress { height: 8px; border-radius: 99px; background: var(--border-subtle); overflow: hidden; }
+.progress > span { display: block; height: 100%; background: var(--gold); border-radius: 99px; transition: width 0.4s ease; }
+@media (prefers-reduced-motion: reduce) { .progress > span { transition: none; } }
+.demo-list { margin: 0; padding-left: 18px; color: var(--ink-secondary); font-size: 13.6px; }
+.demo-list li + li { margin-top: 4px; }
+.demo-keys { display: flex; flex-wrap: wrap; gap: 10px 28px; margin-bottom: 14px; padding: 12px 14px;
+  background: var(--gold-surface); border: 1px solid var(--gold-border); border-radius: 8px; }
+.demo-keys div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.demo-keys span { font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-muted); font-family: var(--f-mono); }
+.demo-keys code { font-size: 15px; color: var(--ink); word-break: break-all; user-select: all; }
+.demo-roles { margin-top: 12px; font-size: 13.4px; }
+.demo-roles summary { cursor: pointer; color: var(--ink-secondary); font-weight: 600; }
+.demo-role { margin-top: 10px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.chips code { background: var(--forest-surface); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: 11.6px; }
+.chip { font-size: 12.4px; color: var(--ink-secondary); background: var(--forest-surface); border: 1px solid var(--border); border-radius: 99px; padding: 3px 10px; }
+.chip b { font-variant-numeric: tabular-nums; color: var(--ink); }
+/* Links on this page stay readable in both themes; the forest link colour is too dark on a dark card. */
+.demo-title a, .demo-keys a { color: var(--gold-ink); text-decoration: none; }
+.demo-title a:hover, .demo-keys a:hover { text-decoration: underline; }

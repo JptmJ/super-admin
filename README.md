@@ -1,7 +1,7 @@
 # Swarnay — Platform Admin
 
 The super admin console. Creates tenants, their head user, branches and module
-licences, sets feature flags, and opens support sessions into a business.
+licences, sets feature flags, and makes demo businesses.
 Nobody but a platform operator can sign in here.
 
 ```bash
@@ -11,7 +11,7 @@ npm run dev        # http://localhost:4100
 
 Needs the backend running on `:4000` (set `BACKEND_URL` in `.env.local` to point
 elsewhere). `NEXT_PUBLIC_APP_URL` is where the tenant app is served — the
-Support tab builds its "open the shop" link from it.
+Demo accounts page shows it as the place to sign in.
 
 ## First sign-in
 
@@ -33,8 +33,7 @@ again resets the password, which is the recovery path if it is lost.
 creates one.
 
 A platform token is refused by every tenant endpoint and a tenant token by every
-platform endpoint, so the only way from this console into a business's data is a
-support session — which is logged.
+platform endpoint, so this console has no way into a business's data at all.
 
 ### Inside a jewellery business
 
@@ -94,7 +93,7 @@ Each tenant's **Modules** tab has a switch per module. Switching one off:
 - takes it out of the shop's menu (the app reads its module list from the
   session, and re-reads it the moment a call is refused), and
 - makes the API refuse **every endpoint of that module** with 403
-  `module_disabled` — for the shop's staff and for support sessions alike.
+  `module_disabled` — for every one of the shop's staff.
   Hiding a menu item alone would leave the endpoints answering anyone who knew
   the URL.
 
@@ -122,30 +121,54 @@ without one. Every switch is in the audit log as `module.enable` /
 | `/` | Platform counts and the most recent tenants. |
 | `/tenants` | Every tenant, with filters. |
 | `/tenants/new` | Create a tenant + its admin + first branch + licences, in one form. |
-| `/tenants/[id]` | Staff, **roles**, branches, module licences and **on/off switches**, support sessions and account status. |
-| `/support` | Every support session, open and past, with what each one changed. |
+| `/tenants/demo` | **Demo accounts**: give a count, get that many demo businesses full of sample data, with their logins. |
+| `/tenants/[id]` | Staff, **roles**, branches, module licences and **on/off switches**, account status, and deleting a demo. |
 | `/flags` | Feature flags: the global default and any per-tenant override. |
 | `/roles` | The role kinds and everything a staff role can be given, read-only. Build them per tenant. |
 | `/audit` | Every super-admin action, filterable by business and action. |
 
-## Support sessions
+## Demo accounts
 
-The only path to a business's data. A session is opened from a tenant's Support
-tab with a reason, a duration and — for the Super Admin only — write access.
+**+ Demo accounts** (Overview and Tenants) asks for one number — how many — and
+makes that many complete businesses for showing the product. Each is built
+through the same services as a real one, so its books balance and every screen
+has something real on it:
 
-- The token is returned **once** and stored only as a SHA-256 hash.
-- The session row is checked on **every** request, so ending a session locks the
-  operator out at once rather than whenever the token would have expired.
-- Read-only is the default, and it refuses anything that is not a GET.
-- Every change made inside the window is tagged with the session in the
-  **tenant's own** audit log, so "who looked at my data" is answerable with
-  exactly what and when.
-- The tenant app shows an undismissable banner naming the operator, the time
-  remaining and whether the session can write.
+- a shop in one Indian city with 1–3 branches, an owner, and a branch admin per
+  branch (now and then one admin covering all of them);
+- 2–4 **staff roles** (Cashier, Storekeeper, Accountant…) each given a random
+  set of permissions from the live permission tree, and 1–2 staff per branch;
+- masters — rates with history back to the start of the financial year, items,
+  making/wastage/hallmark formulas, customers, suppliers, karigars, two savings
+  plans;
+- activity in every module — purchases with bills, tagged stock, bills and
+  receipts, an approval memo, orders moved along their stages, old gold,
+  scheme members with their collections, girvi loans, expenses and a supplier
+  payment.
 
-The "open the shop" link passes the token in the URL fragment, which browsers do
-not send to a server or put in a `Referer` header; the app adopts it and strips
-it from the address bar on arrival.
+Codes are `demo-xxxxx`, logins are `owner@<code>.test`, `admin.<branch>@<code>.test`
+and `first.last@<code>.test`, and **every login in a demo shares one password**.
+Nobody is asked to change it at first sign-in.
+
+Demos are made one at a time in the background, a few seconds to a couple of
+minutes each; the page shows progress and can be left and come back to. The
+passwords are shown there once and kept for an hour — copy them or download the
+CSV. **Stop after this one** finishes the demo in hand and starts no more.
+
+A demo is marked `is_demo`, shown with a **Demo** badge and filterable on the
+Tenants list. Only a demo can be deleted (Settings tab → *Delete demo account*,
+confirmed by typing its code); a real business is refused with `tenant_not_demo`.
+
+The jobs live in the API process's memory, so a restart forgets them — and a
+demo being made at that moment is left half-made; delete it from its tenant page.
+`npm run db:seed -- --count=N` in the backend makes demos with the same generator.
+
+## Support sessions — removed
+
+Taken out of the console on 2026-10-10: no Support tab, no Support Sessions
+page, and nothing here opens a window into a business. The backend endpoints
+(`/api/platform/support-sessions`) and the tenant app's support banner still
+exist, unused.
 
 ## How auth works here
 

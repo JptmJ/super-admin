@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 export default async function TenantsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; search?: string }>;
+  searchParams: Promise<{ status?: string; search?: string; demo?: string }>;
 }) {
   if (!(await readSession())) redirect('/login');
   const params = await searchParams;
@@ -18,6 +18,7 @@ export default async function TenantsPage({
   const query = new URLSearchParams({ limit: '100' });
   if (params.status) query.set('status', params.status);
   if (params.search) query.set('search', params.search);
+  if (params.demo === 'true' || params.demo === 'false') query.set('demo', params.demo);
 
   const [operator, result] = await Promise.all([
     readOperator(),
@@ -33,7 +34,10 @@ export default async function TenantsPage({
           <h1>Tenants</h1>
           <p>{result.data?.total ?? 0} businesses on the platform.</p>
         </div>
-        <Link className="btn gold" href="/tenants/new">+ New tenant</Link>
+        <div className="row-actions">
+          <Link className="btn ghost" href="/tenants/demo">+ Demo accounts</Link>
+          <Link className="btn gold" href="/tenants/new">+ New tenant</Link>
+        </div>
       </div>
 
       <form className="card" style={{ marginBottom: 16 }}>
@@ -50,6 +54,14 @@ export default async function TenantsPage({
               <option value="trial">Trial</option>
               <option value="suspended">Suspended</option>
               <option value="closed">Closed</option>
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="demo">Kind</label>
+            <select id="demo" name="demo" defaultValue={params.demo ?? ''}>
+              <option value="">Real and demo</option>
+              <option value="false">Real businesses</option>
+              <option value="true">Demo accounts</option>
             </select>
           </div>
           <div className="field" style={{ justifyContent: 'flex-end' }}>
@@ -75,6 +87,7 @@ export default async function TenantsPage({
               {rows.map((t) => (
                 <tr key={t.id}>
                   <td><Link href={`/tenants/${t.id}`}>{t.display_name}</Link>
+                    {t.is_demo && <> <span className="pill demo">Demo</span></>}
                     <div className="faint">{t.legal_name}</div></td>
                   <td><code>{t.code}</code></td>
                   <td className="muted">{t.kind}</td>

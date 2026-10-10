@@ -19,7 +19,7 @@ const TONE: Record<string, string> = {
   'user.update': 'purchased', 'user.role_change': 'purchased', 'user.password_reset': 'trial',
   'branch.create': 'active', 'module.entitlement': 'trial', 'flag.set': 'trial',
   'module.enable': 'active', 'module.disable': 'suspended',
-  'support.session_start': 'suspended', 'support.session_end': 'off',
+  'tenant.demo_create': 'purchased', 'tenant.demo_delete': 'suspended',
   'platform.login': 'off',
 };
 
@@ -29,7 +29,7 @@ const ACTIONS = [
   'user.create', 'user.update', 'user.role_change', 'user.password_reset',
   'user.activate', 'user.deactivate',
   'module.entitlement', 'module.enable', 'module.disable', 'flag.set',
-  'support.session_start', 'support.session_end', 'platform.login',
+  'tenant.demo_create', 'tenant.demo_delete', 'platform.login',
 ];
 
 const PAGE = 100;

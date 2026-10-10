@@ -8,7 +8,6 @@ import { Brand } from './Brand';
 const NAV = [
   { href: '/', label: 'Overview' },
   { href: '/tenants', label: 'Tenants' },
-  { href: '/support', label: 'Support Sessions' },
   { href: '/roles', label: 'Roles & Access' },
   { href: '/audit', label: 'Audit Log' },
 ];

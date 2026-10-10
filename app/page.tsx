@@ -30,7 +30,10 @@ export default async function OverviewPage() {
           <h1>Overview</h1>
           <p>Every business on the platform, and the operators who look after them.</p>
         </div>
-        <Link className="btn gold" href="/tenants/new">+ New tenant</Link>
+        <div className="row-actions">
+          <Link className="btn ghost" href="/tenants/demo">+ Demo accounts</Link>
+          <Link className="btn gold" href="/tenants/new">+ New tenant</Link>
+        </div>
       </div>
 
       {statsResult.error && <div className="alert error">{statsResult.error.message}</div>}
@@ -69,7 +72,8 @@ export default async function OverviewPage() {
               <tbody>
                 {tenants.map((t) => (
                   <tr key={t.id}>
-                    <td><Link href={`/tenants/${t.id}`}>{t.display_name}</Link></td>
+                    <td><Link href={`/tenants/${t.id}`}>{t.display_name}</Link>
+                      {t.is_demo && <> <span className="pill demo">Demo</span></>}</td>
                     <td><code>{t.code}</code></td>
                     <td className="muted">{t.kind}</td>
                     <td><span className={`pill ${t.status}`}>{t.status}</span></td>

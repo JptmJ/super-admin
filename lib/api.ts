@@ -63,6 +63,42 @@ export interface TenantRow {
   kind: string; status: string; gstin: string | null; created_at: string;
   branch_count: string; user_count: string; module_count: string; admin_email: string | null;
   max_branches: number | null;
+  /** Made by the Demo accounts button. Only a demo can be deleted. */
+  is_demo: boolean;
+}
+
+/** One sign-in inside a demo business. */
+export interface DemoLogin {
+  fullName: string; email: string;
+  role: 'owner' | 'admin' | 'staff';
+  roleName: string; branch: string;
+}
+
+/** A finished demo business, with everything needed to hand it over. */
+export interface DemoAccount {
+  tenantId: string; code: string; displayName: string; legalName: string; kind: string; city: string;
+  /** Shared by every login in the demo. Shown only by the job, never stored readable. */
+  password: string;
+  branches: Array<{ code: string; name: string }>;
+  roles: Array<{ name: string; permissions: string[] }>;
+  logins: DemoLogin[];
+  /** How many customers, pieces, invoices… were made. */
+  data: Record<string, number>;
+  /** Sample data that could not be made; the demo works without it. */
+  warnings: string[];
+  seconds: number;
+}
+
+export interface DemoJob {
+  id: string; count: number;
+  status: 'queued' | 'running' | 'done';
+  startedAt: string; finishedAt: string | null;
+  /** Which demo (1-based) is being made and what it is doing. Null once finished. */
+  current: { index: number; step: string } | null;
+  accounts: DemoAccount[];
+  failures: Array<{ index: number; message: string }>;
+  /** Asked to stop: the demo in hand was finished, the rest were not started. */
+  stopped: boolean;
 }
 
 /** A seeded role template: owner or admin. */
@@ -141,15 +177,6 @@ export interface Operator {
 /** The one platform role. It holds `*`. */
 export interface PlatformRole {
   code: string; name: string; description: string; permissions: readonly string[];
-}
-
-export interface SupportSessionRow {
-  id: string; tenant_id: string; tenant_code: string; tenant_name: string;
-  reason: string; started_at: string; ends_at: string; ended_at: string | null;
-  can_write: boolean; is_open: boolean; ip_address: string | null;
-  operator_name: string | null; operator_email: string | null;
-  /** Audited changes made inside the window. */
-  action_count: string;
 }
 
 /*

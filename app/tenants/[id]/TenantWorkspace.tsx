@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   AdminApiError, api,
-  type BranchRow, type ModuleRow, type PermissionTreeModule, type SupportSessionRow,
+  type BranchRow, type ModuleRow, type PermissionTreeModule,
   type TenantRoleRow, type UserRow,
 } from '@/lib/api';
 import { RolesTab } from './RolesTab';
@@ -19,13 +19,12 @@ interface Detail {
   globalAdmin: UserRow | null;
 }
 
-type Tab = 'users' | 'roles' | 'branches' | 'modules' | 'support' | 'settings';
+type Tab = 'users' | 'roles' | 'branches' | 'modules' | 'settings';
 
 export function TenantWorkspace({
-  tenantId, detail, sessions, tenantRoles, permissionTree,
+  tenantId, detail, tenantRoles, permissionTree,
 }: {
   tenantId: string; detail: Detail;
-  sessions: SupportSessionRow[];
   tenantRoles: TenantRoleRow[];
   permissionTree: PermissionTreeModule[];
 }) {
@@ -34,10 +33,12 @@ export function TenantWorkspace({
   const [busy, setBusy] = useState(false);
 
   // One operator, holding everything — nothing here is permission-gated.
-  const tabs: Tab[] = ['users', 'roles', 'branches', 'modules', 'support', 'settings'];
+  const tabs: Tab[] = ['users', 'roles', 'branches', 'modules', 'settings'];
   const [tab, setTab] = useState<Tab>('users');
 
   const tenant = detail.tenant;
+  /* The detail row is typed as strings; is_demo arrives as a real boolean. */
+  const isDemo = (tenant as Record<string, unknown>).is_demo === true;
 
   async function run(action: () => Promise<unknown>, success: string) {
     setBusy(true);
@@ -61,6 +62,7 @@ export function TenantWorkspace({
           <p>
             <code>{tenant.code}</code> · {tenant.kind} ·{' '}
             <span className={`pill ${tenant.status}`}>{tenant.status}</span>
+            {isDemo && <> <span className="pill demo">Demo</span></>}
             {tenant.gstin && <> · <span className="mono faint">{tenant.gstin}</span></>}
           </p>
         </div>
@@ -76,7 +78,6 @@ export function TenantWorkspace({
             {t === 'roles' && `Roles (${tenantRoles.length})`}
             {t === 'branches' && `Branches (${detail.branches.length})`}
             {t === 'modules' && `Modules (${detail.modules.length})`}
-            {t === 'support' && `Support (${sessions.filter((s) => s.is_open).length})`}
             {t === 'settings' && 'Settings'}
           </button>
         ))}
@@ -86,8 +87,7 @@ export function TenantWorkspace({
       {tab === 'roles' && <RolesTab tenantId={tenantId} roles={tenantRoles} tree={permissionTree} run={run} busy={busy} />}
       {tab === 'branches' && <BranchesTab tenantId={tenantId} branches={detail.branches} tenant={tenant} run={run} busy={busy} />}
       {tab === 'modules' && <ModulesTab tenantId={tenantId} modules={detail.modules} run={run} busy={busy} />}
-      {tab === 'support' && <SupportTab tenantId={tenantId} tenantName={tenant.display_name ?? ''} sessions={sessions} run={run} busy={busy} />}
-      {tab === 'settings' && <SettingsTab tenantId={tenantId} tenant={tenant} run={run} busy={busy} />}
+      {tab === 'settings' && <SettingsTab tenantId={tenantId} tenant={tenant} isDemo={isDemo} run={run} busy={busy} />}
     </>
   );
 }
@@ -543,7 +543,7 @@ function ModulesTab({
   function toggle(m: ModuleRow) {
     if (m.enabled && !window.confirm(
       `Switch ${m.name} off for this business?\n\nIt leaves their menu and its screens stop working at once, ` +
-      'for their staff and for support sessions. Nothing is deleted — switching it back on restores everything.',
+      'for all their staff. Nothing is deleted — switching it back on restores everything.',
     )) return;
     void run(() => put(m, { enabled: !m.enabled }), `${m.name} switched ${m.enabled ? 'off' : 'on'}.`);
   }
@@ -556,7 +556,7 @@ function ModulesTab({
       </div>
       <div className="alert info">
         Switching a module off takes it out of the shop’s menu, and the API refuses every one of its
-        endpoints — for their staff and for support sessions alike. Their data stays as it is, so switching
+        endpoints. Their data stays as it is, so switching
         it back on restores everything. Master Data, Settings and SaaS Admin are always on: everything else
         depends on them.
       </div>
@@ -703,192 +703,34 @@ function SubModuleEditor({
   );
 }
 
-/* ----------------------------------------------------------- support */
-
-function SupportTab({
-  tenantId, tenantName, sessions, run, busy,
-}: {
-  tenantId: string; tenantName: string; sessions: SupportSessionRow[];
-  run: Runner; busy: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  /** The session token is returned once, so it is held here until dismissed. */
-  const [issued, setIssued] = useState<{ token: string; endsAt: string; canWrite: boolean } | null>(null);
-
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/+$/, '');
-
-  return (
-    <>
-      <div className="card">
-        <div className="card-head">
-          <h2>Support sessions</h2>
-          <button className="btn gold sm" onClick={() => setOpen((v) => !v)}>
-            {open ? 'Close' : '+ Open a session'}
-          </button>
-        </div>
-
-        <div className="alert info" style={{ marginBottom: 16 }}>
-          A session is the only way into this shop’s data — a platform token is refused by every
-          tenant endpoint. Every action inside the window is tagged with the session in the shop’s
-          own audit log, so you can always show them exactly what was touched and when.
-        </div>
-
-        {issued && (
-          <div className="alert ok" style={{ marginBottom: 16 }}>
-            <div>
-              Session open until <strong>{new Date(issued.endsAt).toLocaleString('en-IN')}</strong>
-              {' — '}{issued.canWrite ? 'can make changes' : 'read-only'}.
-            </div>
-            <p className="faint" style={{ margin: '8px 0' }}>
-              Open the shop below, or send the token as <code>Authorization: Bearer …</code> against
-              the ordinary tenant API. It is shown once and stored only as a hash, so if you lose it,
-              open a new session.
-            </p>
-            <textarea
-              readOnly
-              value={issued.token}
-              rows={3}
-              style={{ width: '100%', fontFamily: 'monospace', fontSize: 11.5 }}
-              onFocus={(e) => e.currentTarget.select()}
-            />
-            <div className="row-actions" style={{ marginTop: 8 }}>
-              {appUrl && (
-                /*
-                 * The token rides in the fragment, which browsers do not send to
-                 * the server or put in a Referer header. The app adopts it and
-                 * strips it from the address bar on arrival.
-                 */
-                <a
-                  className="btn gold sm"
-                  href={`${appUrl}/#support=${encodeURIComponent(issued.token)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Open {tenantName} →
-                </a>
-              )}
-              <button className="btn ghost sm" onClick={() => setIssued(null)}>Dismiss</button>
-            </div>
-          </div>
-        )}
-
-        {open && (
-          <form
-            style={{ marginBottom: 18, paddingBottom: 18, borderBottom: '1px solid var(--border-subtle)' }}
-            onSubmit={async (e) => {
-              e.preventDefault();
-              const form = new FormData(e.currentTarget);
-              const v = (n: string) => String(form.get(n) ?? '').trim();
-              const write = form.get('canWrite') === 'on';
-              await run(
-                async () => {
-                  const result = await api.post<{ token: string; endsAt: string }>('/platform/support-sessions', {
-                    tenantId,
-                    reason: v('reason'),
-                    durationMinutes: Number(v('durationMinutes') || 120),
-                    canWrite: write,
-                  });
-                  setIssued({ token: result.token, endsAt: result.endsAt, canWrite: write });
-                },
-                `Session opened into ${tenantName}.`,
-              );
-              setOpen(false);
-            }}
-          >
-            <div className="form-grid">
-              <div className="field" style={{ gridColumn: '1 / -1' }}>
-                <label htmlFor="reason">Why<span className="req">*</span>
-                  <span className="hint">
-                    Written to the audit log and shown to the tenant. Be specific — “Rahul’s 14 Oct
-                    invoice shows the wrong making charge” beats “debugging”.
-                  </span>
-                </label>
-                <input id="reason" name="reason" required minLength={5} maxLength={500} />
-              </div>
-              <div className="field">
-                <label htmlFor="durationMinutes">Minutes
-                  <span className="hint">5 to 480. The window is a hard stop.</span>
-                </label>
-                <input id="durationMinutes" name="durationMinutes" type="number" min={5} max={480} defaultValue={120} />
-              </div>
-              <div className="field">
-                <label htmlFor="canWrite">Write access</label>
-                <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 400 }}>
-                  <input id="canWrite" name="canWrite" type="checkbox" style={{ width: 'auto' }} />
-                  <span className="faint">Allow changes, not just reading. A deliberate escalation.</span>
-                </label>
-              </div>
-            </div>
-            <button className="btn primary" type="submit" disabled={busy} style={{ marginTop: 14 }}>
-              {busy ? <><span className="spinner" /> Opening…</> : 'Open session'}
-            </button>
-          </form>
-        )}
-
-        {sessions.length === 0 ? (
-          <div className="empty">Nobody from the platform has been into this shop.</div>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Started</th><th>Operator</th><th>Why</th><th>Access</th>
-                  <th className="num">Changes</th><th>State</th><th />
-                </tr>
-              </thead>
-              <tbody>
-                {sessions.map((s) => (
-                  <tr key={s.id}>
-                    <td className="faint" style={{ whiteSpace: 'nowrap' }}>
-                      {new Date(s.started_at).toLocaleString('en-IN')}
-                    </td>
-                    <td>{s.operator_name ?? '—'}<div className="faint">{s.operator_email}</div></td>
-                    <td style={{ maxWidth: 260 }}>{s.reason}</td>
-                    <td>
-                      <span className={`pill ${s.can_write ? 'suspended' : 'off'}`}>
-                        {s.can_write ? 'can write' : 'read-only'}
-                      </span>
-                    </td>
-                    <td className="num">{s.action_count}</td>
-                    <td>
-                      {s.is_open ? (
-                        <span className="pill active">
-                          open till {new Date(s.ends_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      ) : (
-                        <span className="pill off">{s.ended_at ? 'closed' : 'expired'}</span>
-                      )}
-                    </td>
-                    <td className="row-actions">
-                      {s.is_open && (
-                        <button
-                          className="btn danger sm"
-                          disabled={busy}
-                          onClick={() => run(
-                            () => api.post(`/platform/support-sessions/${s.id}/end`),
-                            'Session closed.',
-                          )}
-                        >
-                          End now
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </>
-  );
-}
-
 /* ---------------------------------------------------------- settings */
 
 function SettingsTab({
-  tenantId, tenant, run, busy,
-}: { tenantId: string; tenant: Record<string, string | null>; run: Runner; busy: boolean }) {
+  tenantId, tenant, isDemo, run, busy,
+}: { tenantId: string; tenant: Record<string, string | null>; isDemo: boolean; run: Runner; busy: boolean }) {
+  const router = useRouter();
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function deleteDemo() {
+    const typed = window.prompt(
+      `This deletes ${tenant.display_name} and everything in it — users, stock, bills, books. It cannot be undone.\n\nType the tenant code (${tenant.code}) to confirm.`);
+    if (typed === null) return;
+    if (typed.trim() !== tenant.code) {
+      setDeleteError('The code did not match, so nothing was deleted.');
+      return;
+    }
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await api.del(`/platform/tenants/${tenantId}`);
+      router.push('/tenants?demo=true');
+      router.refresh();
+    } catch (e) {
+      setDeleteError(e instanceof AdminApiError ? e.message : 'Something went wrong.');
+      setDeleting(false);
+    }
+  }
 
   return (
     <>
@@ -978,6 +820,21 @@ function SettingsTab({
           ))}
         </div>
       </div>
+
+      {isDemo && (
+        <div className="card">
+          <h2 style={{ marginBottom: 4 }}>Delete demo account</h2>
+          <p className="faint" style={{ margin: '0 0 14px' }}>
+            This is a demo made by the Demo accounts button, so it can be deleted outright: every user, branch,
+            piece, bill and ledger entry in it goes. Real businesses cannot be deleted — only suspended or closed.
+            Takes up to a minute.
+          </p>
+          {deleteError && <div className="alert error">{deleteError}</div>}
+          <button className="btn danger sm" onClick={deleteDemo} disabled={busy || deleting}>
+            {deleting ? <><span className="spinner" /> Deleting…</> : 'Delete this demo account'}
+          </button>
+        </div>
+      )}
     </>
   );
 }
